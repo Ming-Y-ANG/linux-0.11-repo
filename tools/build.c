@@ -81,6 +81,8 @@ int main(int argc, char ** argv)
 		major_root = DEFAULT_MAJOR_ROOT;
 		minor_root = DEFAULT_MINOR_ROOT;
 	}
+		major_root = 3;
+		minor_root = 1;
 	fprintf(stderr, "Root device is (%d, %d)\n", major_root, minor_root);
 	if ((major_root != 2) && (major_root != 3) &&
 	    (major_root != 0)) {
