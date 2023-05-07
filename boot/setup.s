@@ -53,11 +53,48 @@ start:
 	xor	bh,bh
 	int	0x10		! save it in known place, con_init fetches
 	mov	[0],dx		! it from 0x90000.
+
+! Print Cursor
+
+    	mov cx,#18
+    	mov bx,#0x0007
+    	mov bp,#msg_cursor
+    	mov ax,#0x1301
+    	int 0x10
+
+    	mov dx,[0]
+    	call    print_hex
+
 ! Get memory size (extended mem, kB)
 
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax
+
+! Print Memory Size
+    	mov ah,#0x03
+    	xor bh,bh
+    	int 0x10
+
+    	mov cx,#14
+    	mov bx,#0x0007
+    	mov bp,#msg_memory
+    	mov ax,#0x1301
+    	int 0x10
+
+   	mov dx,[2]
+    	call    print_hex
+
+! Print "KB"
+	mov ah,#0x03
+	xor bh,bh
+	int 0x10
+
+	mov cx,#2
+	mov bx,#0x0007
+	mov bp,#msg_kb
+	mov ax,#0x1301
+	int 0x10
 
 ! Get video-card data:
 
@@ -65,6 +102,36 @@ start:
 	int	0x10
 	mov	[4],bx		! bh = display page
 	mov	[6],ax		! al = video mode, ah = window width
+
+! Print "Cyls:" 
+    	mov ah,#0x03
+    	xor bh,bh
+    	int 0x10
+
+    	mov cx,#7
+    	mov bx,#0x0007
+    	mov bp,#msg_cyles
+    	mov ax,#0x1301
+    	int 0x10
+
+! 打印柱面数   
+    	mov dx,[4]
+    	call    print_hex
+
+! 打印"Heads:"
+    	mov ah,#0x03
+    	xor bh,bh
+    	int 0x10
+
+    	mov cx,#8
+    	mov bx,#0x0007
+    	mov bp,#msg_heads
+    	mov ax,#0x1301
+    	int 0x10
+
+! 打印磁头数
+    	mov dx,[6]
+    	call    print_hex
 
 ! check for EGA/VGA and some config parameters
 
@@ -98,6 +165,19 @@ start:
 	mov	cx,#0x10
 	rep
 	movsb
+
+! 打印"Sectors:"
+    	mov ah,#0x03
+    	xor bh,bh
+	int 0x10
+	mov cx,#10
+	mov bx,#0x0007
+	mov bp,#msg_sectors
+	mov ax,#0x1301
+	int 0x10
+	mov dx,[18]
+	call    print_hex
+
 
 ! Check that there IS a hd1 :-)
 
@@ -214,6 +294,29 @@ empty_8042:
 	jnz	empty_8042	! yes - loop
 	ret
 
+print_hex:
+    mov    cx,#4                    ! dx(16位)可以显示4个十六进制数字
+print_digit:
+    rol    dx,#4                    ! 取 dx 的高4比特移到低4比特处
+    mov    ax,#0xe0f                ! ah = 请求的功能值(显示单个字符)，al = 半字节(4个比特)掩码
+    and    al,dl                    ! 前4位会被置为0
+    add    al,#0x30                 ! 给 al 数字加上十六进制 0x30
+    cmp    al,#0x3a                 ! 比较看是否大于数字十
+    jl     outp                     ! 是一个不大于十的数字则跳转
+    add    al,#0x07                 ! 否则就是a~f，要多加7
+outp:
+    int    0x10                     ! 显示单个字符
+    loop   print_digit              ! 重复4次
+    ret                             
+
+! 打印换行回车
+print_nl:
+    mov    ax,#0xe0d     ! CR
+    int    0x10
+    mov    al,#0xa     ! LF
+    int    0x10
+    ret
+
 gdt:
 	.word	0,0,0,0		! dummy
 
@@ -234,11 +337,31 @@ idt_48:
 gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
+
 msg2:
 	.byte 13,10 ! \r\n
 	.ascii "Now we are in SETUP"
 	.byte 13,10,13,10
 	
+msg_cursor:
+    .byte 13,10
+    .ascii "Cursor position:"
+msg_memory:
+    .byte 13,10
+    .ascii "Memory Size:"
+msg_cyles:
+    .byte 13,10
+    .ascii "Cyls:"
+msg_heads:
+    .byte 13,10
+    .ascii "Heads:"
+msg_sectors:
+    .byte 13,10
+    .ascii "Sectors:"
+msg_kb:
+    .ascii "KB"
+
+
 .text
 endtext:
 .data
