@@ -44,16 +44,16 @@ ROOT_DEV = 0x306
 
 entry _start
 _start:
-	mov	ax,#BOOTSEG
+	mov	ax,#BOOTSEG 		! 0x07c0 => ds
 	mov	ds,ax
-	mov	ax,#INITSEG
-	mov	es,ax
-	mov	cx,#256
-	sub	si,si
+	mov	ax,#INITSEG 
+	mov	es,ax 			! 0x9000 => es
+	mov	cx,#256 		! 256 count
+	sub	si,si 			! si, di => 0
 	sub	di,di
 	rep
-	movw
-	jmpi	go,INITSEG
+	movw 				! copy 512 bytes, do {ds:si => es:di} while(cx--)
+	jmpi	go,INITSEG 		! cs => 0x9000, ip => go
 go:	mov	ax,cs
 	mov	ds,ax
 	mov	es,ax
@@ -65,10 +65,10 @@ go:	mov	ax,cs
 ! Note that 'es' is already set up.
 
 load_setup:
-	mov	dx,#0x0000		! drive 0, head 0
-	mov	cx,#0x0002		! sector 2, track 0
-	mov	bx,#0x0200		! address = 512, in INITSEG
-	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
+	mov	dx,#0x0000		! drive 0(dl), head 0(dh)
+	mov	cx,#0x0002		! sector 2(cl), track 0(ch)
+	mov	bx,#0x0200		! address = 512, in INITSEG, es:bx => 9000:200
+	mov	ax,#0x0200+SETUPLEN	! service 2(ah), nr of sectors(al), read 4 sector from sector to ram
 	int	0x13			! read it
 	jnc	ok_load_setup		! ok - continue
 	mov	dx,#0x0000
@@ -85,19 +85,19 @@ ok_load_setup:
 	int	0x13
 	mov	ch,#0x00
 	seg cs
-	mov	sectors,cx
+	mov	sectors,cx 		! get sectors in (cl & 0x3F)
 	mov	ax,#INITSEG
-	mov	es,ax
+	mov	es,ax 			! 9000
 
 ! Print some inane message
 
 	mov	ah,#0x03		! read cursor pos
 	xor	bh,bh
-	int	0x10
+	int	0x10 			! dh => row, dl => column
 	
-	mov	cx,#24
+	mov	cx,#24 			! msg len
 	mov	bx,#0x0007		! page 0, attribute 7 (normal)
-	mov	bp,#msg1
+	mov	bp,#msg1 		! es:bp => msg addr 9000:msg1
 	mov	ax,#0x1301		! write string, move cursor
 	int	0x10
 
@@ -136,7 +136,7 @@ root_defined:
 ! the setup-routine loaded directly after
 ! the bootblock:
 
-	jmpi	0,SETUPSEG
+	jmpi	0,SETUPSEG 	! 9000:200
 
 ! This routine loads the system at address 0x10000, making sure
 ! no 64kB boundaries are crossed. We try to load it as fast as
@@ -242,7 +242,7 @@ sectors:
 	.word 0
 
 msg1:
-	.byte 13,10
+	.byte 13,10 ! \r\n
 	.ascii "Loading system ..."
 	.byte 13,10,13,10
 
