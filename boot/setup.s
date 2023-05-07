@@ -30,6 +30,20 @@ begbss:
 entry start
 start:
 
+! Print "Now we are in SETUP" message
+
+	mov     ax,#SETUPSEG
+	mov 	es,ax
+	mov	ah,#0x03		! read cursor pos
+	xor	bh,bh
+	int	0x10 			! dh => row, dl => column
+	
+	mov	cx,#25 			! msg len
+	mov	bx,#0x0007		! page 0, attribute 7 (normal)
+	mov	bp,#msg2 		! es:bp => msg addr 9020:msg2
+	mov	ax,#0x1301		! write string, move cursor
+	int	0x10
+
 ! ok, the read went well so we get current cursor position and save it for
 ! posterity.
 
@@ -220,6 +234,10 @@ idt_48:
 gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
+msg2:
+	.byte 13,10 ! \r\n
+	.ascii "Now we are in SETUP"
+	.byte 13,10,13,10
 	
 .text
 endtext:
