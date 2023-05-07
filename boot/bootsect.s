@@ -95,7 +95,7 @@ ok_load_setup:
 	xor	bh,bh
 	int	0x10 			! dh => row, dl => column
 	
-	mov	cx,#24 			! msg len
+	mov	cx,#24+5 		! msg len
 	mov	bx,#0x0007		! page 0, attribute 7 (normal)
 	mov	bp,#msg1 		! es:bp => msg addr 9000:msg1
 	mov	ax,#0x1301		! write string, move cursor
@@ -243,7 +243,7 @@ sectors:
 
 msg1:
 	.byte 13,10 ! \r\n
-	.ascii "Loading system ..."
+	.ascii "Loading system,lab1 ..."
 	.byte 13,10,13,10
 
 .org 508
