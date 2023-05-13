@@ -45,12 +45,16 @@ EFLAGS		= 0x24
 OLDESP		= 0x28
 OLDSS		= 0x2C
 
+ESP0 = 4
+KERNEL_STACK = 12
+
 state	= 0		# these are offsets into the task-struct.
 counter	= 4
 priority = 8
-signal	= 12
-sigaction = 16		# MUST be 16 (=len of sigaction)
-blocked = (33*16)
+kernelstack = 12
+signal	= 16
+sigaction = 20		# MUST be 16 (=len of sigaction)
+blocked = (33*16+4) 	# 受阻塞信号位图的偏移量
 
 # offsets within sigaction
 sa_handler = 0
@@ -67,6 +71,7 @@ nr_system_calls = 74
 .globl system_call,sys_fork,timer_interrupt,sys_execve
 .globl hd_interrupt,floppy_interrupt,parallel_interrupt
 .globl device_not_available, coprocessor_error
+.globl switch_to_ex,first_return_kernel
 
 .align 2
 bad_sys_call:
@@ -283,3 +288,62 @@ parallel_interrupt:
 	outb %al,$0x20
 	popl %eax
 	iret
+
+.align 2
+switch_to_ex:
+    	#因为该汇编函数要在c语言中调用，所以要先在汇编中处理栈帧
+	pushl %ebp	#save previous ebp
+	movl %esp,%ebp  #update ebp addr, ebp+4=return addr, ebp+8=pnext, ebp+12=_LDT(next)
+	pushl %ecx  	
+	pushl %ebx 	
+	pushl %eax 	
+
+	#先得到目标进程的pcb，然后进行判断
+	movl 8(%ebp),%ebx #pnext
+	cmpl %ebx,current
+	je 1f
+
+	/** 执行到此处，就要进行真正的基于堆栈的进程切换了 */
+
+	#PCB的切换
+	movl %ebx,%eax
+	xchgl %eax,current
+	
+	#TSS中内核栈指针的重写
+	movl tss,%ecx
+	addl $4096,%ebx  	#pnxet + 4096 =>(kernel stack esp0)
+	movl %ebx,ESP0(%ecx)    #update pnext esp0(tss + 4 = esp0)
+
+	#切换内核栈
+	movl %esp,KERNEL_STACK(%eax)  #save current task(eax) esp in kernel stack
+	movl 8(%ebp),%ebx	#get pnext
+	movl KERNEL_STACK(%ebx),%esp #get pnext esp
+
+	#LDT的切换
+	movl 12(%ebp),%ecx #_LDT(next)
+	lldt %cx
+	movl $0x17,%ecx	   # 用户数据段
+	mov %cx,%fs
+	
+	cmpl %eax,last_task_used_math
+	jne 1f
+	clts
+	
+	#在到子进程的内核栈开始工作了，接下来做的四次弹栈以及ret处理使用的都是子进程内核栈中的东西
+1:	popl %eax
+	popl %ebx
+	popl %ecx
+	popl %ebp
+	ret
+
+.align 2
+first_return_kernel:
+	popl %edx
+	popl %edi
+	popl %esi
+	pop %gs
+	pop %fs
+	pop %es
+	pop %ds
+	iret
+

@@ -18,6 +18,7 @@
 #include <asm/system.h>
 
 extern void write_verify(unsigned long address);
+extern void first_return_kernel(void);
 
 long last_pid=0;
 
@@ -74,6 +75,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	struct task_struct *p;
 	int i;
 	struct file *f;
+	long *krnstack;
 
 	p = (struct task_struct *) get_free_page();
 	if (!p)
@@ -91,6 +93,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->cutime = p->cstime = 0;
 	p->start_time = jiffies;
 	fprintk(3,"%d\tN\t%d\n",p->pid,jiffies);
+#if 0
 	p->tss.back_link = 0;
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
@@ -112,6 +115,40 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->tss.gs = gs & 0xffff;
 	p->tss.ldt = _LDT(nr);
 	p->tss.trace_bitmap = 0x80000000;
+#endif
+	/* 基于堆栈切换的代码(对frok的修改其实就是对子进程内核栈的初始化) */
+     	krnstack = (long)(PAGE_SIZE +(long)p);//p指针加上页面大小就是子进程的内核栈位置，所以这句话就是krnstack指针指向子进程的内核栈
+
+	//初始化内核栈(krnstack)中的内容:
+	//下面的五句话可以完成对书上那个图(4.22)所示的关联效果(父子进程共有同一内存、堆栈和数据代码块)
+	/*
+	而且很容易可以看到，ss,esp,elags,cs,eip这些参数来自调用该函数的进程的内核栈中，
+	也就是父进程的内核栈，所以下面的指令就是将父进程内核栈的前五个内容拷贝到了子进程的内核栈中
+	*/
+	*(--krnstack) = ss & 0xffff;
+	*(--krnstack) = esp;
+	*(--krnstack) = eflags;
+	*(--krnstack) = cs & 0xffff;
+	*(--krnstack) = eip;
+
+	*(--krnstack) = ds & 0xffff;
+	*(--krnstack) = es & 0xffff;
+	*(--krnstack) = fs & 0xffff;
+	*(--krnstack) = gs & 0xffff;
+	*(--krnstack) = esi;
+	*(--krnstack) = edi;
+	*(--krnstack) = edx;
+
+	*(--krnstack) = (long) first_return_kernel;//处理switch_to返回的位置
+
+	*(--krnstack) = ebp;
+	*(--krnstack) = ecx;
+	*(--krnstack) = ebx;
+	*(--krnstack) = 0;
+
+	//把switch_to中要的东西存进去
+	p->kernelstack = krnstack;
+
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0"::"m" (p->tss.i387));
 	if (copy_mem(nr,p)) {
