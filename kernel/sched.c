@@ -115,8 +115,11 @@ void schedule(void)
 					(*p)->alarm = 0;
 				}
 			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
-			(*p)->state==TASK_INTERRUPTIBLE)
+			(*p)->state==TASK_INTERRUPTIBLE){
+				fprintk(3,"%d\tJ\t%d\n",(*p)->pid,jiffies);
 				(*p)->state=TASK_RUNNING;
+			}
+
 		}
 
 /* this is the scheduler proper: */
@@ -138,12 +141,22 @@ void schedule(void)
 				(*p)->counter = ((*p)->counter >> 1) +
 						(*p)->priority;
 	}
+
+	if(current->pid != task[next] ->pid)
+	{
+		/*新建修改--时间片到时程序 => 就绪*/
+		if(current->state == TASK_RUNNING)
+			fprintk(3,"%d\tJ\t%d\n",current->pid,jiffies);
+		fprintk(3,"%d\tR\t%d\n",task[next]->pid,jiffies);
+	}
 	switch_to(next);
 }
 
 int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
+	if(current->pid != 0)
+	fprintk(3,"%d\tW\t%d\n",current->pid,jiffies);
 	schedule();
 	return 0;
 }
@@ -159,9 +172,12 @@ void sleep_on(struct task_struct **p)
 	tmp = *p;
 	*p = current;
 	current->state = TASK_UNINTERRUPTIBLE;
+	fprintk(3,"%d\tW\t%d\n",current->pid,jiffies);
 	schedule();
-	if (tmp)
+	if (tmp){
+		fprintk(3,"%d\tJ\t%d\n",tmp->pid,jiffies);
 		tmp->state=0;
+	}
 }
 
 void interruptible_sleep_on(struct task_struct **p)
@@ -175,14 +191,18 @@ void interruptible_sleep_on(struct task_struct **p)
 	tmp=*p;
 	*p=current;
 repeat:	current->state = TASK_INTERRUPTIBLE;
+	fprintk(3,"%d\tW\t%d\n",current->pid,jiffies);
 	schedule();
 	if (*p && *p != current) {
+		fprintk(3,"%d\tJ\t%d\n",(*p)->pid,jiffies);
 		(**p).state=0;
 		goto repeat;
 	}
 	*p=NULL;
-	if (tmp)
+	if (tmp){
+		fprintk(3,"%d\tJ\t%d\n",tmp->pid,jiffies);
 		tmp->state=0;
+	}
 }
 
 void wake_up(struct task_struct **p)
@@ -190,6 +210,7 @@ void wake_up(struct task_struct **p)
 	if (p && *p) {
 		(**p).state=0;
 		*p=NULL;
+		fprintk(3,"%d\tJ\t%d\n",(*p)->pid,jiffies);
 	}
 }
 
